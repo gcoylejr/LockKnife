@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# Function to print a security warning and get user consent
+security_warning() {
+    echo "********************************************************"
+    echo "*                 SECURITY & LEGAL WARNING             *"
+    echo "********************************************************"
+    echo "* This script is intended for use on devices that you  *"
+    echo "* own or have explicit permission to access. Unauthorized *"
+    echo "* use of this script on devices you do not own or have  *"
+    echo "* permission to access may be illegal and unethical.   *"
+    echo "*                                                      *"
+    echo "* By continuing, you confirm that you have legal       *"
+    echo "* authorization to use this tool on the target device. *"
+    echo "********************************************************"
+    read -p "Do you agree to the terms and wish to proceed? (yes/no): " consent
+    if [[ "$consent" != "yes" ]]; then
+        echo "Operation canceled by the user."
+        exit 1
+    fi
+}
+
+# Function to print the banner
 print_banner() {
     local banner=(
         "******************************************"
@@ -18,6 +39,7 @@ print_banner() {
     echo
 }
 
+# Function to check if ADB is installed
 check_adb() {
     if ! command -v adb &>/dev/null; then
         echo "Error: ADB (Android Debug Bridge) not found. Please install ADB and make sure it's in your PATH."
@@ -27,28 +49,41 @@ check_adb() {
     fi
 }
 
-
+# Function to check for updates with checksum verification
 check_for_updates() {
-    local current_version=$(cat version.txt)
-    local latest_version=$(curl -sSL "https://raw.githubusercontent.com/ImKKingshuk/LockKnife/main/version.txt")
+    local current_version
+    local latest_version
+    local repo_url="https://raw.githubusercontent.com/ImKKingshuk/LockKnife/main"
+    
+    if [[ ! -f version.txt ]]; then
+        echo "Error: version.txt not found. Unable to check for updates."
+        exit 1
+    fi
+
+    current_version=$(cat version.txt)
+    latest_version=$(curl -sSL "$repo_url/version.txt")
+    latest_script_checksum=$(curl -sSL "$repo_url/LockKnife.sh.sha256")
 
     if [ "$latest_version" != "$current_version" ]; then
         echo "A new version ($latest_version) is available. Updating Tool... Please Wait..."
-        update_tool
+
+        curl -sSL "$repo_url/LockKnife.sh" -o LockKnife.sh
+        echo "$latest_script_checksum LockKnife.sh" | sha256sum -c -
+
+        if [ $? -eq 0 ]; then
+            curl -sSL "$repo_url/version.txt" -o version.txt
+            echo "Tool has been updated to the latest version."
+            exec bash LockKnife.sh
+        else
+            echo "Error: Checksum verification failed. The update has been aborted."
+            exit 1
+        fi
     else
         echo "You are using the latest version ($current_version)."
     fi
 }
 
-update_tool() {
-    local repo_url="https://raw.githubusercontent.com/ImKKingshuk/LockKnife/main"
-    curl -sSL "$repo_url/LockKnife.sh" -o LockKnife.sh
-    curl -sSL "$repo_url/version.txt" -o version.txt
-
-    echo "Tool has been updated to the latest version."
-    exec bash LockKnife.sh
-}
-
+# Function to connect to the Android device
 connect_device() {
     local device_serial="$1"
     
@@ -67,6 +102,7 @@ connect_device() {
     fi
 }
 
+# Function to recover passwords
 recover_password() {
     local file_path="$1"
     local password=""
@@ -87,6 +123,7 @@ recover_password() {
     rm "$file_path"
 }
 
+# Function to recover locksettings.db
 recover_locksettings_db() {
     local db_file="locksettings.db"
     local device_serial="$1"
@@ -112,6 +149,7 @@ recover_locksettings_db() {
     rm "$db_file"
 }
 
+# Function to recover Wi-Fi passwords
 recover_wifi_passwords() {
     local wifi_file="/data/misc/wifi/WifiConfigStore.xml"
     local device_serial="$1"
@@ -133,6 +171,7 @@ recover_wifi_passwords() {
     rm "$wifi_file"
 }
 
+# Submenu for older Android versions (<= 5)
 submenu_older_android() {
     local device_serial
     local recovery_option
@@ -161,6 +200,7 @@ submenu_older_android() {
     esac
 }
 
+# Submenu for Android 6 to 9
 submenu_android_6_or_newer() {
     local device_serial
     local recovery_option
@@ -192,6 +232,7 @@ submenu_android_6_or_newer() {
     esac
 }
 
+# Submenu for Android 10 or newer
 submenu_android_10_or_newer() {
     local device_serial
     local recovery_option
@@ -215,6 +256,7 @@ submenu_android_10_or_newer() {
     esac
 }
 
+# Main menu function
 main_menu() {
     local android_version
 
@@ -237,15 +279,16 @@ main_menu() {
     esac
 }
 
-
-
+# Execute the script
 execute_lockknife() {
     print_banner
+    security_warning
     check_for_updates
     check_adb
     main_menu
 }
 
+# Run the script if executed directly
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     execute_lockknife
 fi
